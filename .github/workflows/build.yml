@@ -106,8 +106,11 @@ jobs:
           GVXSDK_REPO: ${{ vars.GVXSDK_REPO }}
         run: |
           echo "GOPRIVATE=${GOPRIVATE_PATTERN:-github.com/olaria01/*}" >> "$GITHUB_ENV"
-          git config --global url."${GVXSDK_REPO:-git@github.com-gvxsdk:olaria01/gVxSdk.git}".insteadOf "https://github.com/olaria01/gVxSdk"
-          git config --global url."${GVXSDK_REPO:-git@github.com-gvxsdk:olaria01/gVxSdk.git}".insteadOf "git@github.com:olaria01/gVxSdk.git"
+          gvxsdk_repo="${GVXSDK_REPO:-ssh://git@github.com-gvxsdk/olaria01/gVxSdk}"
+          git config --global url."$gvxsdk_repo".insteadOf "https://github.com/olaria01/gVxSdk"
+          git config --global url."$gvxsdk_repo".insteadOf "https://github.com/olaria01/gVxSdk.git"
+          git config --global url."$gvxsdk_repo".insteadOf "git@github.com:olaria01/gVxSdk.git"
+          git config --global --get-regexp '^url\\..*\\.insteadOf$'
 
       - name: Verify
         working-directory: gBot
