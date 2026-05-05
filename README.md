@@ -4,9 +4,9 @@ Public CI/CD builder for gBot releases.
 
 ## Latest Release
 
-Version: v0.0.0-ci-test
+Version: pending
 
-Download: https://github.com/olaria01/gbot-release-builder/releases/tag/v0.0.0-ci-test
+Download: pending
 
 ## Release Flow
 
