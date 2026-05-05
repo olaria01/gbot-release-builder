@@ -1,0 +1,163 @@
+name: Build gBot Release
+
+on:
+  repository_dispatch:
+    types: [gbot_release]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: gBot tag to build, for example v2.4.1
+        required: true
+      source_ref:
+        description: Git ref to checkout
+        required: false
+
+permissions:
+  contents: write
+
+env:
+  GO_VERSION: 1.25.x
+  APP_NAME: gbot
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve release input
+        id: release
+        env:
+          DISPATCH_VERSION: ${{ github.event.client_payload.version }}
+          DISPATCH_SOURCE_REF: ${{ github.event.client_payload.source_ref }}
+          MANUAL_VERSION: ${{ inputs.version }}
+          MANUAL_SOURCE_REF: ${{ inputs.source_ref }}
+        run: |
+          version="${DISPATCH_VERSION:-$MANUAL_VERSION}"
+          source_ref="${DISPATCH_SOURCE_REF:-$MANUAL_SOURCE_REF}"
+          if [ -z "$version" ]; then
+            echo "::error::version is required"
+            exit 1
+          fi
+          if [ -z "$source_ref" ]; then
+            source_ref="refs/tags/$version"
+          fi
+          case "$version" in
+            v*) ;;
+            *)
+              echo "::error::version must start with v, got $version"
+              exit 1
+              ;;
+          esac
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "source_ref=$source_ref" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout builder repository
+        uses: actions/checkout@v4
+
+      - name: Configure SSH access
+        env:
+          GBOT_SSH_KEY: ${{ secrets.GBOT_SSH_KEY }}
+          GVXSDK_SSH_KEY: ${{ secrets.GVXSDK_SSH_KEY }}
+        run: |
+          if [ -z "$GBOT_SSH_KEY" ] || [ -z "$GVXSDK_SSH_KEY" ]; then
+            echo "::error::GBOT_SSH_KEY and GVXSDK_SSH_KEY are required"
+            exit 1
+          fi
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$GBOT_SSH_KEY" > ~/.ssh/gbot_release_builder_gbot
+          printf '%s\n' "$GVXSDK_SSH_KEY" > ~/.ssh/gbot_release_builder_gvxsdk
+          chmod 600 ~/.ssh/gbot_release_builder_gbot ~/.ssh/gbot_release_builder_gvxsdk
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<'EOF'
+          Host github.com-gbot
+            HostName github.com
+            User git
+            IdentityFile ~/.ssh/gbot_release_builder_gbot
+            IdentitiesOnly yes
+
+          Host github.com-gvxsdk
+            HostName github.com
+            User git
+            IdentityFile ~/.ssh/gbot_release_builder_gvxsdk
+            IdentitiesOnly yes
+          EOF
+
+      - name: Checkout gBot
+        env:
+          GBOT_REPO: ${{ vars.GBOT_REPO }}
+          SOURCE_REF: ${{ steps.release.outputs.source_ref }}
+        run: |
+          repo="${GBOT_REPO:-git@github.com-gbot:olaria01/gBot.git}"
+          git clone --no-checkout "$repo" gBot
+          cd gBot
+          git fetch --depth=1 origin "$SOURCE_REF"
+          git checkout --detach FETCH_HEAD
+          echo "GBOT_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: gBot/go.sum
+
+      - name: Configure private Go modules
+        env:
+          GOPRIVATE_PATTERN: ${{ vars.GOPRIVATE_PATTERN }}
+          GVXSDK_REPO: ${{ vars.GVXSDK_REPO }}
+        run: |
+          echo "GOPRIVATE=${GOPRIVATE_PATTERN:-github.com/olaria01/*}" >> "$GITHUB_ENV"
+          git config --global url."${GVXSDK_REPO:-git@github.com-gvxsdk:olaria01/gVxSdk.git}".insteadOf "https://github.com/olaria01/gVxSdk"
+          git config --global url."${GVXSDK_REPO:-git@github.com-gvxsdk:olaria01/gVxSdk.git}".insteadOf "git@github.com:olaria01/gVxSdk.git"
+
+      - name: Verify
+        working-directory: gBot
+        run: |
+          go version
+          go vet ./...
+          go build ./...
+
+      - name: Build Windows no-console binary
+        working-directory: gBot
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          mkdir -p bin
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
+            go build -trimpath \
+            -ldflags="-s -w -H windowsgui -X main.buildVersion=$VERSION" \
+            -o "bin/${APP_NAME}-nogui-windows-amd64.exe" \
+            ./cmd/gbot
+
+      - name: Package checksums
+        working-directory: gBot
+        run: |
+          cd bin
+          sha256sum "${APP_NAME}-nogui-windows-amd64.exe" > SHA256SUMS.txt
+
+      - name: Update README latest release
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          RELEASE_URL: https://github.com/${{ github.repository }}/releases/tag/${{ steps.release.outputs.version }}
+        run: |
+          perl -0pi -e 's/Version: .*/Version: $ENV{VERSION}/; s#Download: .*#Download: $ENV{RELEASE_URL}#' README.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          if git diff --cached --quiet; then
+            echo "README already up to date"
+            exit 0
+          fi
+          git commit -m "Update latest release ${VERSION}"
+          git push origin HEAD:main
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release.outputs.version }}
+          name: gBot ${{ steps.release.outputs.version }}
+          body: |
+            Source: olaria01/gBot@${{ steps.release.outputs.source_ref }}
+            Commit: ${{ env.GBOT_SHA }}
+          files: |
+            gBot/bin/gbot-nogui-windows-amd64.exe
+            gBot/bin/SHA256SUMS.txt
