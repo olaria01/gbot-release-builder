@@ -110,7 +110,16 @@ jobs:
           git config --global url."$gvxsdk_repo".insteadOf "https://github.com/olaria01/gVxSdk"
           git config --global url."$gvxsdk_repo".insteadOf "https://github.com/olaria01/gVxSdk.git"
           git config --global url."$gvxsdk_repo".insteadOf "git@github.com:olaria01/gVxSdk.git"
-          git config --global --get-regexp '^url\\..*\\.insteadof$' || true
+          {
+            echo "GIT_CONFIG_COUNT=3"
+            echo "GIT_CONFIG_KEY_0=url.$gvxsdk_repo.insteadOf"
+            echo "GIT_CONFIG_VALUE_0=https://github.com/olaria01/gVxSdk"
+            echo "GIT_CONFIG_KEY_1=url.$gvxsdk_repo.insteadOf"
+            echo "GIT_CONFIG_VALUE_1=https://github.com/olaria01/gVxSdk.git"
+            echo "GIT_CONFIG_KEY_2=url.$gvxsdk_repo.insteadOf"
+            echo "GIT_CONFIG_VALUE_2=git@github.com:olaria01/gVxSdk.git"
+          } >> "$GITHUB_ENV"
+          git ls-remote "$gvxsdk_repo" HEAD >/dev/null
 
       - name: Verify
         working-directory: gBot
