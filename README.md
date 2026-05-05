@@ -1,5 +1,5 @@
 # gBot Release Builder
 
-Version: pending
+Version: v2.4.1
 
-Download: pending
+Download: https://github.com/olaria01/gbot-release-builder/releases/tag/v2.4.1
