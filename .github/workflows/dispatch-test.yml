@@ -1,0 +1,30 @@
+name: Dispatch Test
+
+on:
+  repository_dispatch:
+    types: [gbot_release]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to test
+        required: true
+        default: v0.0.0-test
+
+permissions:
+  contents: read
+
+jobs:
+  receive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Show dispatch payload
+        env:
+          DISPATCH_VERSION: ${{ github.event.client_payload.version }}
+          DISPATCH_SOURCE_REPO: ${{ github.event.client_payload.source_repo }}
+          DISPATCH_SOURCE_REF: ${{ github.event.client_payload.source_ref }}
+          MANUAL_VERSION: ${{ inputs.version }}
+        run: |
+          echo "event_name=${GITHUB_EVENT_NAME}"
+          echo "version=${DISPATCH_VERSION:-$MANUAL_VERSION}"
+          echo "source_repo=${DISPATCH_SOURCE_REPO}"
+          echo "source_ref=${DISPATCH_SOURCE_REF}"
