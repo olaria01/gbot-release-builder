@@ -1,5 +1,5 @@
 # gBot Release Builder
 
-Version: v2.4.1
+Version: v2.5.0
 
-Download: https://github.com/olaria01/gbot-release-builder/releases/tag/v2.4.1
+Download: https://github.com/olaria01/gbot-release-builder/releases/tag/v2.5.0
